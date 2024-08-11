@@ -1,8 +1,14 @@
+"""
+This module performs document retrieval from some arbitrary queries in the
+MS-Marco corpus and reports the time taken.
+"""
+
 from datasets import load_dataset
 from retriever import Retriever
 import time
 
 CORPUS_PATH = "mteb/msmarco-v2"
+
 
 def load_queries(n=1000):
     # Load 1K queries

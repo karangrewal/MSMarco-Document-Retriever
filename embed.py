@@ -1,3 +1,9 @@
+"""
+Given a set of queries and documents (given by the dicts `id_to_queries` and
+`id_to_documents` which are saved to disk), generate embeddings which will be
+further used for search.
+"""
+
 from datasets import load_dataset
 import json
 import os
@@ -10,15 +16,11 @@ CORPUS_PATH = "mteb/msmarco-v2"
 MODEL_NAME = "bert-base-uncased"
 
 
-"""
-We have `id_to_queries` and `id_to_documents` which map IDs of queries to the
-query, and IDs of documents to the document, respective. Now, create embeddings
-of the queries and documents.
-"""
+def embed_queries(encoder, tokenizer, id_to_queries, batch_size=512,
+                  max_items=None):
 
-def embed_queries(encoder, tokenizer, id_to_queries, batch_size=512, max_items=None):
-
-    # Split `id_to_queries` into 2 parallel lists of IDs and their corresponding queries
+    # Split `id_to_queries` into 2 parallel lists of IDs and their corresponding
+    # queries
     id_query_pairs = list(id_to_queries.items())
 
     # Cut off at `max_items`
@@ -48,9 +50,11 @@ def embed_queries(encoder, tokenizer, id_to_queries, batch_size=512, max_items=N
     torch.save(embeddings, os.path.join("/workspace/train_data/", "queries.pt"))
 
 
-def embed_documents(encoder, tokenizer, id_to_documents, batch_size=512, max_items=None):
+def embed_documents(encoder, tokenizer, id_to_documents, batch_size=512,
+                    max_items=None):
 
-    # Split `id_to_documents` into 2 parallel lists of IDs and their corresponding documents
+    # Split `id_to_documents` into 2 parallel lists of IDs and their
+    # corresponding documents
     id_document_pairs = list(id_to_documents.items())
 
     # Cut off at `max_items`
@@ -95,59 +99,6 @@ def generate_embeddings(list_of_inputs, encoder, tokenizer):
         del embeddings
         torch.cuda.empty_cache()
         return embeddings_cpu
-
-
-# -- Outdated function
-
-def embed_and_store_corpus_streaming():
-    """
-    Stream the corpus and generate embeddings on the fly.
-    """
-    CHUNK_SIZE = 100
-    PROJECT_NAME = "v3"
-    file_count = 1
-
-    # Load model
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModel.from_pretrained(MODEL_NAME)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
-
-    # Load corpus in streaming mode
-    corpus = load_dataset(CORPUS_PATH, "corpus", streaming=True)
-
-    documents = []
-
-    # Iterate through the dataset and save in chunks
-    for example in corpus["corpus"]:
-        documents.append(example["text"])
-
-        if len(documents) == CHUNK_SIZE:
-
-            # Generate and store embeddings
-            tokens = tokenizer(documents, padding=True, truncation=True, return_tensors="pt")
-            tokens = {k: t.to(device) for k, t in tokens.items()}
-            for k in tokens:
-                print(tokens[k].size())
-            embeddings = model(**tokens).last_hidden_state[:, 0, :] # Use CLS token
-
-            # Flush to disk
-            folder = os.path.join("/workspace", "embeddings", PROJECT_NAME)
-            if not os.path.isdir(folder):
-                os.mkdir(folder)
-
-            # 1. Save documents
-            with open(os.path.join(folder, f"documents{file_count}.json"), "w+") as f:
-                json.dump(documents, f)
-
-            # 2. Save embeddings
-            torch.save(embeddings, os.path.join(folder, f"embeddings{file_count}.pt"))
-
-            print(f"file count={file_count}, len={len(documents)}")
-
-            documents = []
-            del embeddings
-            file_count += 1
 
 
 if __name__ == "__main__":

@@ -56,17 +56,25 @@ class Retriever:
         self.document_embeddings = self.document_embeddings.to(self.device)
 
     def search(self, query: str, k: int):
-        # Encode query + apply transformation head
+        """
+        Perform document retrieval and return a list of `Result` objects, each
+        of which represent a document retrieved given `query`.
+        """
+        # Encode query via pre-trained model and apply transformation head
         tokens = self.tokenizer([query], padding=True, truncation=True, return_tensors="pt")
         tokens = {k: t.to(self.device) for k, t in tokens.items()}
         query_embedding = self.encoder(**tokens).last_hidden_state[:, 0, :] # Use CLS token
         qe_transformed = self.qh(query_embedding) # (1, D)
 
         # Compare transformed query embedding to all document embeddings
+        #
+        # Take inner product between the (transformed) query embedding and each
+        # document embedding to measure similarity
         scores = self.document_embeddings @ qe_transformed.T # (*, 1)
         scores = scores.squeeze() # (*,)
 
-        # Return top k documents in descending order of score
+        # Sort `scores` to find documents which have the highest similarities
+        # with the query; get the top k documents in descending order of score
         inds = scores.argsort(descending=True)[:k]
 
         top_k_ids = [self.list_of_document_ids[idx.item()] for idx in inds]

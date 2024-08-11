@@ -1,6 +1,9 @@
 """
-This module trains a MLP to predict the correct document embedding given a query embedding
-on the corpus & query embeddings in order to retrieve the correct one
+This module trains a MLP to predict which document to retrieve given a query.
+
+More details: Both the query and document are embedded via a pre-trained BERT
+encoder. The MLP further transforms the query embedding's to match the
+document's embedding.
 """
 
 from datasets import load_dataset
@@ -32,18 +35,33 @@ class QueryHead(nn.Module):
 
     def forward(self, X):
         """
-        X -> (B, D)
+        X -> PyTorch Tensor with shape (B, D)
         """
         return self.layers(X)
 
 
-def get_training_batch(dataset, query_embeddings, document_embeddings, batch_size):
+def get_training_batch(dataset, query_embeddings, document_embeddings,
+                       batch_size):
     """
-    Returns a tuple of tensors (query_embeddings, document_embeddings) where
-    query_embedding[i] and document_embedding[i] are a true retrieval pair.
+    Returns a tuple of tensors `(query_embeddings, document_embeddings)` where
+    `query_embedding[i]` and `document_embedding[i]` are a true retrieval pair.
+
+    dataset -> Hugging Face dataset object
+    query_embeddings -> PyTorch Tensor containing all query embeddings, where
+                        each embedding (along dim 0) corresponds to the queries
+                        whose IDs are given by `list_of_query_ids.json`
+    document_embeddings -> PyTorch Tensor containing all document embeddings,
+                           where each embedding (along dim 0) corresponds to the
+                           documents whose IDs are given by
+                           `list_of_document_ids.json`
+    batch_size -> int indicating the batch size
     """
-    list_of_query_ids = json.load(open("/workspace/train_data/list_of_query_ids.json", "r"))
-    list_of_document_ids = json.load(open("/workspace/train_data/list_of_document_ids.json", "r"))
+    list_of_query_ids = json.load(
+        open("/workspace/train_data/list_of_query_ids.json", "r")
+    )
+    list_of_document_ids = json.load(
+        open("/workspace/train_data/list_of_document_ids.json", "r")
+    )
 
     query_document_pairs = []
     while len(query_document_pairs) < batch_size:
@@ -95,13 +113,17 @@ def train(model, optimizer, device, num_iters, batch_size):
         # Pass query embeddings through model
         qe_transformed = model(qe)
 
-        # Make predictions - treat query-document pairs as positive examples and
-        # everything else as negative examples; every query-document combination
-        # from this batch can be given a true/false label, and this becomes a
-        # classification task which train via cross-entropy loss
-        preds = qe_transformed @ de.T # (B, B) where the diagonal elements should be
-                                      # close to 1, non-diagonal elements should be
-                                      # close to zero
+        # Make predictions!
+        #
+        # Treat each query i and document i as a positive pair, while query j
+        # and document k are negatives pairs for all j != k
+        #
+        # This way, we can set up a classification task, and we learn to
+        # retrieve the correct document (treated as a class label) for each
+        # query (treated as the input); train by minimizing cross-entropy loss
+        preds = qe_transformed @ de.T # (B, B) where the diagonal elements
+                                      # should be close to 1, non-diagonal
+                                      # elements should be close to zero
 
         loss = F.cross_entropy(input=preds, target=labels)
         loss.backward()

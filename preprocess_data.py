@@ -1,5 +1,5 @@
 """
-This module loads the MS Marco corpus, divides it into chunks of 100K examples
+This module loads the MS-Marco corpus, divides it into chunks of 100K examples
 each, and saves those files.
 """
 
@@ -11,8 +11,13 @@ CORPUS_PATH = "mteb/msmarco-v2"
 MODEL_NAME = "bert-base-uncased"
 
 
-def preprocess(chunk_size, out_path):
+def preprocess(chunk_size):
+    """
+    Break the corpus into chunks and save to disk, for easier loading in the
+    future.
 
+    chunk_size -> int specifying the number of rows to save in one file
+    """
     # Load corpus in streaming mode
     corpus = load_dataset("mteb/msmarco-v2", "corpus", streaming=True)
 
@@ -36,6 +41,15 @@ def preprocess(chunk_size, out_path):
 
 
 def collect_training_ids():
+    """
+    Read the dataset of query-document true retrieval pairs, and save the
+    following to disk in JSON format:
+    
+        1) dict containing query IDs as keys mapped to their corresponding str
+           as values,
+        2) dict containing document IDs as keys mapped to their corresponding
+           str as values.
+    """
 
     # 1. Load dataset of query-document associations
     dataset = load_dataset(CORPUS_PATH, "default")["train"]
@@ -54,7 +68,8 @@ def collect_training_ids():
         if query["_id"] in query_ids:
             id_to_query[query["_id"]] = query["text"]
 
-    save_dict(id_to_query, os.path.join("/workspace/train_data/", "id_to_queries.json"))
+    save_dict(id_to_query, os.path.join("/workspace/train_data/",
+                                        "id_to_queries.json"))
 
     # 3. Load documents; save ones which are relevant for training
     print("loading corpus ...")
@@ -66,7 +81,8 @@ def collect_training_ids():
         if doc["_id"] in corpus_ids:
             id_to_documents[doc["_id"]] = doc["text"]
 
-    save_dict(id_to_documents, os.path.join("/workspace/train_data/", "id_to_documents.json"))
+    save_dict(id_to_documents, os.path.join("/workspace/train_data/",
+                                            "id_to_documents.json"))
 
 
 def save_dict(data, out_path):
